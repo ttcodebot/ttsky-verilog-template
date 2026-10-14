@@ -1,0 +1,48 @@
+name: devcontainer
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  devcontainer:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        dind: ["2", "4"]
+    name: dind:${{ matrix.dind }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+
+      - name: Select docker-in-docker feature version
+        run: |
+          sed -i -E 's|(features/docker-in-docker):[0-9]+"|\1:${{ matrix.dind }}"|' .devcontainer/devcontainer.json
+          grep docker-in-docker .devcontainer/devcontainer.json
+
+      - name: Fill in project info
+        run: |
+          sed -i -E \
+            -e 's|^(  title: +)""|\1"Devcontainer test"|' \
+            -e 's|^(  author: +)""|\1"ttcodebot"|' \
+            -e 's|^(  description: +)""|\1"Devcontainer test"|' \
+            info.yaml
+          head -8 info.yaml
+
+      - name: Host docker info
+        run: docker version && uname -a
+
+      - name: Build devcontainer and harden project
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            set -e
+            source /ttsetup/venv/bin/activate
+            docker version
+            docker run --rm hello-world
+            ./tt/tt_tool.py --create-user-config
+            ./tt/tt_tool.py --harden
+            ./tt/tt_tool.py --print-stats
